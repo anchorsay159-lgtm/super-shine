@@ -1,0 +1,20 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { PaymentMethod } from '@supershine/shared';
+import { AppShell } from '@/components/shell';
+import { Card, Field, PageHeader, StatusBadge } from '@/components/ui';
+import { useWebApp } from '@/context/web-app';
+
+export default function ProfilePage() {
+  const app = useWebApp(); const router = useRouter();
+  const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [payment, setPayment] = useState<PaymentMethod>('cash_delivery');
+  const [label, setLabel] = useState('Home'); const [detail, setDetail] = useState(''); const [primary, setPrimary] = useState(true);
+  useEffect(() => { if (app.profile) { setName(app.profile.name); setPhone(app.profile.phone); setPayment(app.profile.defaultPaymentMethod); } }, [app.profile]);
+  async function saveProfile(event: FormEvent) { event.preventDefault(); await app.saveProfile({ name, phone, paymentMethod: payment }); }
+  async function saveAddress(event: FormEvent) { event.preventDefault(); if (await app.saveAddress({ label, detail, primary })) { setDetail(''); setPrimary(false); } }
+  async function logout() { await app.signOut(); router.replace('/'); }
+  const initial = app.profile?.name?.trim().charAt(0).toUpperCase() || 'S';
+  return <AppShell><PageHeader eyebrow="Your account" title="Profile and addresses" description="Account information is shared with the Super Shine mobile app."/><div className="split-layout"><div className="stack"><Card className="card-pad"><h2>Personal information</h2><form className="stack" onSubmit={saveProfile}><Field label="Full name"><input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required/></Field><Field label="Email" hint="Email changes are managed through account support."><input type="email" value={app.profile?.email ?? ''} disabled/></Field><Field label="Phone"><input type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)}/></Field><Field label="Default payment method"><select value={payment} onChange={(e) => setPayment(e.target.value as PaymentMethod)}><option value="cash_pickup">Cash on pickup</option><option value="cash_delivery">Cash on delivery</option><option value="promptpay">PromptPay</option></select></Field><button className="button button-primary" disabled={Boolean(app.busy)}>{app.busy === 'profile' ? 'Saving…' : 'Save profile'}</button></form></Card><Card className="card-pad"><h2>Saved addresses</h2><div className="stack">{app.addresses.map((address) => <div className="address-card" key={address.id}><div><strong>{address.label}</strong><p>{address.detail}</p></div>{address.isPrimary ? <StatusBadge tone="success">Primary</StatusBadge> : null}</div>)}</div><div className="divider"/><h3>Add an address</h3><form className="stack" onSubmit={saveAddress}><Field label="Label"><input maxLength={40} value={label} onChange={(e) => setLabel(e.target.value)} required/></Field><Field label="Full pickup address"><textarea maxLength={500} value={detail} onChange={(e) => setDetail(e.target.value)} required/></Field><label className="checkbox-row"><input type="checkbox" checked={primary} onChange={(e) => setPrimary(e.target.checked)}/>Make this the primary address</label><button className="button button-secondary" disabled={Boolean(app.busy)}>{app.busy === 'address' ? 'Saving…' : 'Add address'}</button></form></Card></div><aside className="stack"><Card className="profile-summary"><div className="avatar">{initial}</div><h2>{app.profile?.name || 'Customer'}</h2><p>{app.profile?.email || 'Demo account'}</p><StatusBadge tone={app.mode === 'demo' ? 'attention' : 'success'}>{app.mode === 'demo' ? 'Demo customer' : 'Customer account'}</StatusBadge></Card><Card className="card-pad stack"><h2>Account controls</h2><button className="button button-danger button-block" onClick={() => void logout()}>{app.mode === 'demo' ? 'Exit demo' : 'Log out'}</button></Card></aside></div></AppShell>;
+}

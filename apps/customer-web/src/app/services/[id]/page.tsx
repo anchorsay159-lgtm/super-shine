@@ -1,0 +1,14 @@
+'use client';
+
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { formatMoney } from '@supershine/shared';
+import { AppShell } from '@/components/shell';
+import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui';
+import { useWebApp } from '@/context/web-app';
+
+export default function ServiceDetailPage() {
+  const app = useWebApp(); const params = useParams<{ id: string }>(); const service = app.services.find((item) => item.id === decodeURIComponent(params.id)); const line = service ? app.cart.find((item) => item.serviceId === service.id) : null;
+  if (!service) return <AppShell><EmptyState title="Service not found" body="This service may have been removed or is still loading." action={<Link className="button button-secondary" href="/services">View services</Link>}/></AppShell>;
+  return <AppShell><PageHeader eyebrow="Service details" title={service.name} description={service.description} action={<StatusBadge tone={service.enabled ? 'success' : 'attention'}>{service.enabled ? 'Available' : app.t('unavailable')}</StatusBadge>}/><div className="split-layout"><Card className="card-pad stack"><div><h2>What to expect</h2><p className="muted">Professional handling matched to this service, with progress visible in your order history.</p></div><div className="detail-list"><div className="detail-row"><span>Starting price</span><strong>{formatMoney(service.price, app.language)} / {service.priceUnit}</strong></div><div className="detail-row"><span>Pricing</span><strong>{service.pricingType === 'estimated' ? 'Estimated until inspection' : 'Fixed price'}</strong></div><div className="detail-row"><span>Turnaround</span><strong>About {service.turnaroundHours} hours</strong></div></div>{service.options.length ? <div><h2>Available preferences</h2><div className="cluster">{service.options.map((option) => <StatusBadge key={option.id}>{option.labelKey}</StatusBadge>)}</div></div> : null}</Card><Card className="price-breakdown"><h2>Add to your order</h2><p className="muted">Choose quantity now. Service preferences can be confirmed during checkout.</p><div className="service-price">{formatMoney(service.price, app.language)} <small>/ {service.priceUnit}</small></div><div className="cluster">{line ? <div className="quantity"><button aria-label="Decrease quantity" onClick={() => app.setCartQuantity(service.id, line.quantity - 1)}>−</button><span>{line.quantity}</span><button aria-label="Increase quantity" onClick={() => app.setCartQuantity(service.id, line.quantity + 1)}>+</button></div> : null}<button className="button button-primary" disabled={!service.enabled} onClick={() => app.setCartQuantity(service.id, (line?.quantity ?? 0) + 1)}>{line ? 'Add another' : app.t('addToCart')}</button></div>{line ? <Link className="button button-secondary button-block" href="/cart">View cart</Link> : null}</Card></div></AppShell>;
+}
