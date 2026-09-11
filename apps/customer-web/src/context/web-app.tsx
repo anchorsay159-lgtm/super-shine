@@ -9,7 +9,7 @@ import {
   calculateOrderPreview, DEFAULT_SETTINGS, DEMO_SERVICES, DEMO_SLOTS,
   type Address, type BusinessSettings, type CartLine, type Coupon,
   type CustomerNotification, type CustomerOrder, type LanguageCode,
-  type LaundryService, type PaymentMethod, type PickupSlot, type Profile,
+  type LaundryService, type PaymentMethod, type PickupSlot, type Profile, type CollectionMethod, type ReturnMethod,
   translate, type TranslationKey,
 } from '@supershine/shared';
 
@@ -31,7 +31,7 @@ type AuthMode = 'guest' | 'customer' | 'demo';
 type Feedback = { tone: 'success' | 'error' | 'info'; message: string } | null;
 
 type CheckoutInput = {
-  addressId: string; pickupSlotId: string; pickupInstructions: string; contactPhone: string;
+  collectionMethod: CollectionMethod; returnMethod: ReturnMethod; addressId?: string; pickupSlotId?: string; pickupInstructions: string; contactPhone: string;
   paymentMethod: PaymentMethod; couponCode?: string; customerComment: string;
 };
 
@@ -53,6 +53,9 @@ type AppValue = {
   refresh: () => Promise<void>; markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>; respondToPrice: (orderId: string, approve: boolean) => Promise<boolean>;
   sendMessage: (orderId: string, message: string) => Promise<boolean>;
+  beginPromptPayAttempt: (orderId: string, retry?: boolean) => Promise<boolean>;
+  requestPromptPayConfirmation: (orderId: string) => Promise<boolean>;
+  changeOrderPaymentMethod: (orderId: string, method: PaymentMethod) => Promise<boolean>;
   uploadPaymentSlip: (orderId: string, file: File) => Promise<boolean>;
   dismissFeedback: () => void;
 };
@@ -77,22 +80,29 @@ function safeAuthMessage(error: unknown) {
 }
 
 function createDemoOrder(lines: CartLine[], services: LaundryService[], settings: BusinessSettings, input: CheckoutInput, coupon?: Coupon) {
-  const preview = calculateOrderPreview(lines, services, settings, coupon);
+  const fulfillmentSettings = { ...settings, pickupFee: input.collectionMethod === 'home_pickup' ? settings.pickupFee : 0, deliveryFee: input.returnMethod === 'home_delivery' ? settings.deliveryFee : 0 };
+  const preview = calculateOrderPreview(lines, services, fulfillmentSettings, coupon);
   const now = new Date().toISOString();
   const databaseId = `demo-order-${crypto.randomUUID()}`;
-  const slot = DEMO_SLOTS.find((item) => item.id === input.pickupSlotId) ?? DEMO_SLOTS[0];
+  const slot = input.collectionMethod === 'home_pickup' ? (DEMO_SLOTS.find((item) => item.id === input.pickupSlotId) ?? DEMO_SLOTS[0]) : null;
   const order: CustomerOrder = {
-    databaseId, id: `DEMO-${Date.now().toString().slice(-8)}`, userId: 'browser-demo', status: 'requested',
+    databaseId, id: `DEMO-${Date.now().toString().slice(-8)}`, userId: 'browser-demo', status: 'pending',
     items: lines.map((line, index) => { const service = services.find((item) => item.id === line.serviceId)!; return { id: `${databaseId}-${index}`, serviceId: service.id, serviceName: service.name, serviceIcon: service.icon, quantity: line.quantity, priceUnit: service.priceUnit, unitPrice: service.price, lineTotal: service.price * line.quantity, pricingType: service.pricingType, preferences: line.preferences }; }),
-    contactPhone: input.contactPhone, pickupSlotId: slot.id, pickupDate: slot.date, pickupStart: slot.startTime,
-    pickupEnd: slot.endTime, pickupAddress: DEMO_ADDRESS.detail, pickupInstructions: input.pickupInstructions,
+    collectionMethod: input.collectionMethod, returnMethod: input.returnMethod,
+    contactPhone: input.contactPhone, pickupSlotId: slot?.id ?? null, pickupDate: slot?.date ?? '', pickupStart: slot?.startTime ?? '',
+    pickupEnd: slot?.endTime ?? '', pickupAddress: input.collectionMethod === 'home_pickup' ? DEMO_ADDRESS.detail : '', deliveryAddress: input.returnMethod === 'home_delivery' ? DEMO_ADDRESS.detail : '', pickupInstructions: input.pickupInstructions,
     customerComment: input.customerComment.trim(), subtotal: preview.subtotal, pickupFee: preview.pickupFee,
     deliveryFee: preview.deliveryFee, discount: preview.discount, pickupBenefitDiscount: 0,
-    couponCode: coupon?.code ?? null, estimatedTotal: preview.total, finalTotal: null, amount: preview.total,
-    pricingType: lines.some((line) => services.find((item) => item.id === line.serviceId)?.pricingType === 'estimated') ? 'estimated' : 'fixed',
-    paymentMethod: input.paymentMethod, paymentStatus: 'pending', hasPaymentSlip: false,
+    couponCode: coupon?.code ?? null, estimatedTotal: preview.total,
+    finalTotal: lines.some((line) => services.find((item) => item.id === line.serviceId)?.pricingType === 'estimated') ? null : preview.total,
+    amount: preview.total,
+    pricingType: lines.some((line) => services.find((item) => item.id === line.serviceId)?.pricingType === 'estimated') ? 'estimated' : 'fixed', pricingStatus: lines.some((line) => services.find((item) => item.id === line.serviceId)?.pricingType === 'estimated') ? 'estimated' : 'finalized',
+    paymentMethod: input.paymentMethod, paymentStatus: 'unpaid', hasPaymentSlip: false,
     priceApprovalStatus: 'not_required', isDemo: true,
-    history: [{ id: `${databaseId}-history`, newStatus: 'requested', actorRole: 'customer', comment: 'Demo order placed', createdAt: now }],
+    amountPaid: 0, outstandingAmount: preview.total, paymentReference: null,
+    paymentExpiresAt: null, paymentConfirmationRequestedAt: null, paymentFailureReason: '',
+    paymentConfirmedAmount: null, paymentAmountMismatch: false,
+    history: [{ id: `${databaseId}-history`, newStatus: 'pending', actorRole: 'customer', comment: 'Demo order placed', createdAt: now }],
     messages: [], createdAt: now, updatedAt: now,
   };
   return order;
@@ -119,6 +129,7 @@ export function WebAppProvider({ children }: PropsWithChildren) {
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const orderSubmitting = useRef(false);
+  const paymentSubmitting = useRef(false);
 
   const updateDemoOrders = useCallback((update: (current: CustomerOrder[]) => CustomerOrder[]) => {
     setOrders((current) => {
@@ -341,9 +352,10 @@ export function WebAppProvider({ children }: PropsWithChildren) {
         setFeedback({ tone: 'success', message: 'Demo order placed.' }); return order;
       }
       if (!supabase || !session?.user.id) { setError('Please sign in before placing an order.'); return null; }
-      const result = await supabase.rpc('place_order_v11', {
+      const result = await supabase.rpc('place_order_v20', {
         p_items: cart.map((line) => ({ serviceId: line.serviceId, quantity: line.quantity, preferences: line.preferences })),
-        p_preferences: {}, p_pickup_slot_id: input.pickupSlotId, p_address_id: input.addressId,
+        p_preferences: {}, p_collection_method: input.collectionMethod, p_return_method: input.returnMethod,
+        p_pickup_slot_id: input.pickupSlotId || null, p_address_id: input.addressId || null,
         p_pickup_instructions: input.pickupInstructions.trim(), p_contact_phone: input.contactPhone.trim(),
         p_payment_method: input.paymentMethod, p_coupon_code: input.couponCode || null,
         p_customer_comment: input.customerComment.trim(), p_is_demo: false,
@@ -366,7 +378,7 @@ export function WebAppProvider({ children }: PropsWithChildren) {
   }, [mode, session?.user.id, supabase]);
 
   const respondToPrice = useCallback(async (orderId: string, approve: boolean) => {
-    if (mode === 'demo') { updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? { ...order, priceApprovalStatus: approve ? 'approved' : 'rejected', status: approve ? 'received' : 'on_hold' } : order)); return true; }
+    if (mode === 'demo') { updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? { ...order, priceApprovalStatus: approve ? 'approved' : 'rejected', amount: approve && order.finalTotal != null ? order.finalTotal : order.amount } : order)); return true; }
     if (!supabase || busy) return false;
     setBusy('price-response'); const result = await supabase.rpc('respond_to_price_v17', { p_order_id: orderId, p_approve: approve, p_note: '' }); setBusy(null);
     if (result.error) { setError('We could not save your price response.'); return false; }
@@ -382,9 +394,68 @@ export function WebAppProvider({ children }: PropsWithChildren) {
     await loadAccount(session.user.id); return true;
   }, [busy, loadAccount, mode, session?.user.id, supabase, updateDemoOrders]);
 
+  const beginPromptPayAttempt = useCallback(async (orderId: string, retry = false) => {
+    if (paymentSubmitting.current || busy) return false;
+    paymentSubmitting.current = true; setBusy('promptpay-attempt'); setError(null);
+    try {
+      if (mode === 'demo') {
+        const attempt = Date.now().toString().slice(-8);
+        const expiresAt = new Date(Date.now() + settings.promptPayAttemptMinutes * 60_000).toISOString();
+        updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? {
+          ...order, paymentMethod: 'promptpay', paymentStatus: 'unpaid',
+          paymentReference: `DEMO-${order.id}-${attempt}`, paymentExpiresAt: expiresAt,
+          paymentConfirmationRequestedAt: null, paymentFailureReason: '', paymentRejectionReason: '',
+        } : order));
+        return true;
+      }
+      if (!supabase || !session?.user.id) return false;
+      const result = await supabase.rpc('prepare_promptpay_attempt_v19', { p_order_id: orderId, p_force_new: retry });
+      if (result.error) { setError('We could not prepare this PromptPay payment. Please try again.'); return false; }
+      await loadAccount(session.user.id); return true;
+    } finally { paymentSubmitting.current = false; setBusy(null); }
+  }, [busy, loadAccount, mode, session?.user.id, settings.promptPayAttemptMinutes, supabase, updateDemoOrders]);
+
+  const requestPromptPayConfirmation = useCallback(async (orderId: string) => {
+    if (paymentSubmitting.current || busy) return false;
+    paymentSubmitting.current = true; setBusy('promptpay-confirmation'); setError(null);
+    try {
+      if (mode === 'demo') {
+        updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? {
+          ...order, paymentStatus: 'pending', paymentConfirmationRequestedAt: new Date().toISOString(),
+        } : order));
+        setFeedback({ tone: 'info', message: 'Demo payment is waiting for simulated confirmation.' }); return true;
+      }
+      if (!supabase || !session?.user.id) return false;
+      const result = await supabase.rpc('request_promptpay_confirmation_v19', { p_order_id: orderId });
+      if (result.error) { setError('We could not request payment confirmation. Please try again.'); return false; }
+      await loadAccount(session.user.id);
+      if (result.data === 'expired') { setError('This PromptPay attempt expired. Generate a new QR and try again.'); return false; }
+      setFeedback({ tone: 'info', message: 'Payment is waiting for confirmation.' }); return true;
+    } finally { paymentSubmitting.current = false; setBusy(null); }
+  }, [busy, loadAccount, mode, session?.user.id, supabase, updateDemoOrders]);
+
+  const changeOrderPaymentMethod = useCallback(async (orderId: string, method: PaymentMethod) => {
+    if (paymentSubmitting.current || busy) return false;
+    paymentSubmitting.current = true; setBusy('payment-method'); setError(null);
+    try {
+      if (mode === 'demo') {
+        const expiresAt = method === 'promptpay' ? new Date(Date.now() + settings.promptPayAttemptMinutes * 60_000).toISOString() : null;
+        updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? {
+          ...order, paymentMethod: method, paymentStatus: 'unpaid', paymentReference: method === 'promptpay' ? `DEMO-${order.id}-${Date.now().toString().slice(-8)}` : null,
+          paymentExpiresAt: expiresAt, paymentConfirmationRequestedAt: null, paymentFailureReason: '', paymentRejectionReason: '',
+        } : order));
+        return true;
+      }
+      if (!supabase || !session?.user.id) return false;
+      const result = await supabase.rpc('customer_change_payment_method_v19', { p_order_id: orderId, p_method: method });
+      if (result.error) { setError('We could not change the payment method. Please try again.'); return false; }
+      await loadAccount(session.user.id); return true;
+    } finally { paymentSubmitting.current = false; setBusy(null); }
+  }, [busy, loadAccount, mode, session?.user.id, settings.promptPayAttemptMinutes, supabase, updateDemoOrders]);
+
   const uploadPaymentSlip = useCallback(async (orderId: string, file: File) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) { setError('Choose a JPG, PNG, or WebP image smaller than 10 MB.'); return false; }
-    if (mode === 'demo') { updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? { ...order, hasPaymentSlip: true, paymentStatus: 'waiting_verification' } : order)); setFeedback({ tone: 'info', message: 'Demo payment submitted for simulated review.' }); return true; }
+    if (mode === 'demo') { updateDemoOrders((current) => current.map((order) => order.databaseId === orderId ? { ...order, hasPaymentSlip: true, paymentStatus: 'pending', paymentConfirmationRequestedAt: new Date().toISOString() } : order)); setFeedback({ tone: 'info', message: 'Demo fallback slip submitted for simulated review.' }); return true; }
     if (!supabase || !session?.user.id || busy) return false;
     setBusy('payment-slip'); const extension = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1];
     const path = `${session.user.id}/${orderId}/payment_slip-${Date.now()}.${extension}`;
@@ -404,9 +475,10 @@ export function WebAppProvider({ children }: PropsWithChildren) {
     unreadCount: notifications.filter((item) => !item.readAt).length,
     signIn, signUp, startDemo, signOut, requestPasswordReset, updatePassword, setLanguage,
     setCartQuantity, clearCart, saveAddress, saveProfile, placeOrder, refresh,
-    markNotificationRead, markAllNotificationsRead, respondToPrice, sendMessage, uploadPaymentSlip,
+    markNotificationRead, markAllNotificationsRead, respondToPrice, sendMessage,
+    beginPromptPayAttempt, requestPromptPayConfirmation, changeOrderPaymentMethod, uploadPaymentSlip,
     dismissFeedback: () => setFeedback(null),
-  }), [accountLoading, addresses, busy, cart, catalogLoading, coupons, error, feedback, initialized, language, markAllNotificationsRead, markNotificationRead, mode, notifications, orders, placeOrder, profile, refresh, requestPasswordReset, respondToPrice, saveAddress, saveProfile, sendMessage, services, session?.user.id, settings, signIn, signOut, signUp, slots, startDemo, updatePassword, uploadPaymentSlip, setCartQuantity, clearCart, setLanguage]);
+  }), [accountLoading, addresses, beginPromptPayAttempt, busy, cart, catalogLoading, changeOrderPaymentMethod, coupons, error, feedback, initialized, language, markAllNotificationsRead, markNotificationRead, mode, notifications, orders, placeOrder, profile, refresh, requestPasswordReset, requestPromptPayConfirmation, respondToPrice, saveAddress, saveProfile, sendMessage, services, session?.user.id, settings, signIn, signOut, signUp, slots, startDemo, updatePassword, uploadPaymentSlip, setCartQuantity, clearCart, setLanguage]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

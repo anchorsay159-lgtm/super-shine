@@ -1,0 +1,75 @@
+[data-testid='customer-web-canvas'],
+[data-testid='customer-web-frame'] {
+  min-height: 100%;
+}
+
+[data-testid='customer-web-canvas'] {
+  background-image: linear-gradient(135deg, #dce9ed 0%, #e7f0f2 52%, #dce7ed 100%);
+}
+
+[data-testid='customer-web-frame'] {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(15, 164, 147, 0.09), transparent 30%),
+    radial-gradient(circle at 92% 8%, rgba(79, 134, 232, 0.06), transparent 28%);
+  background-attachment: local;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-testid='customer-web-frame'] [role='button'],
+[data-testid='customer-web-frame'] [role='tab'],
+[data-testid='customer-web-frame'] a {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-testid='customer-web-frame'] [role='button']:not([aria-disabled='true']):hover,
+[data-testid='customer-web-frame'] [role='tab']:not([aria-disabled='true']):hover,
+[data-testid='customer-web-frame'] a:hover {
+  opacity: 0.88;
+}
+
+[data-testid='customer-web-frame'] [role='button']:focus-visible,
+[data-testid='customer-web-frame'] [role='tab']:focus-visible,
+[data-testid='customer-web-frame'] a:focus-visible,
+[data-testid='customer-web-frame'] input:focus-visible,
+[data-testid='customer-web-frame'] textarea:focus-visible {
+  outline: 2px solid #236bc5;
+  outline-offset: 2px;
+}
+
+[data-testid='customer-web-frame'] input,
+[data-testid='customer-web-frame'] textarea {
+  cursor: text;
+}
+
+[data-testid='customer-web-frame'] [aria-disabled='true'] {
+  cursor: default;
+}
+
+@supports (height: 100dvh) {
+  [data-testid='customer-web-canvas'],
+  [data-testid='customer-web-frame'] {
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 600px) {
+  [data-testid='customer-web-canvas'],
+  [data-testid='customer-web-frame'] {
+    width: 100%;
+    max-width: none;
+    border-left-width: 0;
+    border-right-width: 0;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-testid='customer-web-frame'] * {
+    scroll-behavior: auto !important;
+  }
+}

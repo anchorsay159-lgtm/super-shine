@@ -1,0 +1,19 @@
+project_id = "tozgpzdvddjtcdzhgbqa"
+
+[functions.line-connect-callback]
+verify_jwt = false
+
+[functions.line-webhook]
+verify_jwt = false
+
+[functions.line-notifications-worker]
+verify_jwt = false
+
+[functions.line-order-link]
+verify_jwt = false
+
+[functions.line-connect-start]
+verify_jwt = true
+
+[functions.admin-create-driver]
+verify_jwt = true

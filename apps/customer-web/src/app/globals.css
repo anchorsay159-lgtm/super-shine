@@ -212,6 +212,8 @@ p { line-height: 1.6; }
 .avatar { width: 72px; height: 72px; display: grid; place-items: center; margin-bottom: 18px; border-radius: 23px; color: var(--navy); background: var(--yellow); font-size: 1.8rem; font-weight: 900; }
 .profile-summary h2 { margin-bottom: 4px; color: white; }
 .profile-summary p { color: #c8d9e1; }
+.line-preferences-head { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.line-preferences-head p { margin:4px 0 0; color:var(--muted); }
 .address-card { display: flex; justify-content: space-between; gap: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 13px; }
 .address-card strong { display: block; margin-bottom: 4px; }
 .address-card p { margin: 0; color: var(--muted); font-size: .86rem; }

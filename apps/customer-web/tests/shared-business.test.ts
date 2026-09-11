@@ -10,9 +10,10 @@ test('browser and mobile-compatible account input normalization is safe', () => 
   assert.equal(normalizeThaiPhone('092-721-8119'), '+66927218119');
 });
 
-test('shared labels preserve the established database meanings', () => {
-  assert.equal(ORDER_STATUS_LABELS.pickup_confirmed, 'Pickup confirmed');
-  assert.equal(PAYMENT_STATUS_LABELS.waiting_verification, 'Pending verification');
+test('shared labels preserve the unified database meanings', () => {
+  assert.equal(ORDER_STATUS_LABELS.accepted, 'Accepted');
+  assert.equal(PAYMENT_STATUS_LABELS.pending, 'Pending');
+  assert.equal(PAYMENT_STATUS_LABELS.partially_paid, 'Partially Paid');
 });
 
 test('coupon and total helpers calculate against the intended base', () => {

@@ -1,28 +1,23 @@
 import type { BusinessSettings, CartLine, Coupon, CustomerOrder, LanguageCode, LaundryService, OrderStatus, PaymentStatus, PickupSlot } from './types';
+import { ORDER_STATUS_LABELS, orderProgress } from './order-workflow';
 
 export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
-  'requested', 'pickup_confirmed', 'picked_up', 'received', 'cleaning', 'quality_check',
-  'out_for_delivery', 'waiting_price_approval', 'payment_verification_required', 'on_hold',
+  'pending', 'accepted', 'pickup_in_progress', 'picked_up', 'awaiting_dropoff',
+  'received_at_store', 'processing', 'ready', 'ready_for_collection', 'out_for_delivery',
 ];
 
 export const ORDER_STATUS_PROGRESS: Record<OrderStatus, number> = {
-  requested: 8, payment_verification_required: 8, pickup_confirmed: 18, picked_up: 32,
-  received: 45, waiting_price_approval: 48, cleaning: 62, quality_check: 76,
-  out_for_delivery: 90, delivered: 100, completed: 100, on_hold: 45,
-  rejected: 0, withdrawn: 0,
+  pending: 12, accepted: 25, pickup_in_progress: 38, picked_up: 50,
+  awaiting_dropoff: 38, received_at_store: 50, processing: 63,
+  ready: 75, ready_for_collection: 83, out_for_delivery: 88,
+  delivered: 100, collected: 100, cancelled: 0,
 };
 
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  requested: 'Requested', pickup_confirmed: 'Pickup confirmed', picked_up: 'Picked up',
-  received: 'Received', cleaning: 'Cleaning', quality_check: 'Quality check',
-  out_for_delivery: 'Out for delivery', delivered: 'Delivered', completed: 'Completed',
-  waiting_price_approval: 'Price approval', payment_verification_required: 'Payment verification',
-  on_hold: 'On hold', rejected: 'Rejected', withdrawn: 'Withdrawn',
-};
+export { ORDER_STATUS_LABELS };
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  pending: 'Pending', waiting_verification: 'Pending verification', verified: 'Verified',
-  rejected: 'Rejected', paid: 'Paid', outstanding: 'Outstanding', refunded: 'Refunded',
+  unpaid: 'Unpaid', pending: 'Pending', paid: 'Paid', partially_paid: 'Partially Paid',
+  failed: 'Failed', expired: 'Expired', refunded: 'Refunded',
 };
 
 export function normalizeEmail(value: string) { return value.trim().toLowerCase(); }
@@ -80,10 +75,13 @@ export function calculateOrderPreview(lines: CartLine[], services: LaundryServic
 
 export function isSlotAvailable(slot: PickupSlot) { return slot.enabled && slot.bookedCount < slot.capacity; }
 export function orderIsActive(order: CustomerOrder) { return ACTIVE_ORDER_STATUSES.includes(order.status); }
+export function orderWorkflowProgress(order: CustomerOrder) { return orderProgress(order.status, order.collectionMethod, order.returnMethod); }
 
 export const DEFAULT_SETTINGS: BusinessSettings = {
   storeName: 'Super Shine', timezone: 'Asia/Bangkok', currency: 'THB', openTime: '08:00:00',
   closeTime: '21:00:00', manualStatus: 'automatic', pickupFee: 0, deliveryFee: 30,
+  promptPayEnabled: false, promptPayDisplayName: '', promptPayIdentifier: '',
+  promptPayInstructions: '', promptPayAttemptMinutes: 15,
   businessPhone: '', lineUrl: '', serviceAreas: [], appVersion: '1.4.0',
 };
 

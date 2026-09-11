@@ -1,13 +1,15 @@
 export type LanguageCode = 'en' | 'th' | 'my' | 'bn' | 'dz';
 export type UserRole = 'customer' | 'admin' | 'driver';
 export type PaymentMethod = 'cash_pickup' | 'cash_delivery' | 'promptpay';
-export type PaymentStatus = 'pending' | 'waiting_verification' | 'verified' | 'rejected' | 'paid' | 'outstanding' | 'refunded';
+export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'partially_paid' | 'failed' | 'expired' | 'refunded';
 export type PriceApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
+export type CollectionMethod = 'home_pickup' | 'store_dropoff';
+export type ReturnMethod = 'home_delivery' | 'store_collection';
+export type PricingStatus = 'estimated' | 'finalized';
 export type OrderStatus =
-  | 'requested' | 'pickup_confirmed' | 'picked_up' | 'received' | 'cleaning'
-  | 'quality_check' | 'out_for_delivery' | 'delivered' | 'completed'
-  | 'waiting_price_approval' | 'payment_verification_required' | 'on_hold'
-  | 'rejected' | 'withdrawn';
+  | 'pending' | 'accepted' | 'pickup_in_progress' | 'picked_up'
+  | 'awaiting_dropoff' | 'received_at_store' | 'processing' | 'ready'
+  | 'ready_for_collection' | 'out_for_delivery' | 'delivered' | 'collected' | 'cancelled';
 
 export type ServiceOption = {
   id: string; serviceId: string; optionKey: string; labelKey: string;
@@ -40,7 +42,9 @@ export type PickupSlot = {
 export type BusinessSettings = {
   storeName: string; timezone: string; currency: string; openTime: string; closeTime: string;
   manualStatus: 'automatic' | 'open' | 'closed'; pickupFee: number; deliveryFee: number;
-  promptPayQrPath?: string | null; businessPhone: string; lineUrl: string;
+  promptPayQrPath?: string | null; promptPayEnabled: boolean; promptPayDisplayName: string;
+  promptPayIdentifier: string; promptPayInstructions: string; promptPayAttemptMinutes: number;
+  businessPhone: string; lineUrl: string;
   serviceAreas: string[]; appVersion: string;
 };
 
@@ -64,13 +68,17 @@ export type StatusHistory = { id: string; previousStatus?: OrderStatus | null; n
 
 export type CustomerOrder = {
   databaseId: string; id: string; userId: string; status: OrderStatus; items: OrderItem[];
+  collectionMethod: CollectionMethod; returnMethod: ReturnMethod;
   contactPhone: string; pickupSlotId?: string | null; pickupDate?: string | null;
-  pickupStart?: string | null; pickupEnd?: string | null; pickupAddress: string;
+  pickupStart?: string | null; pickupEnd?: string | null; pickupAddress: string; deliveryAddress: string;
   pickupInstructions: string; customerComment: string; subtotal: number; pickupFee: number;
   deliveryFee: number; discount: number; pickupBenefitDiscount: number;
   couponCode?: string | null; estimatedTotal: number; finalTotal?: number | null; amount: number;
-  pricingType: 'fixed' | 'estimated'; paymentMethod: PaymentMethod; paymentStatus: PaymentStatus;
+  pricingType: 'fixed' | 'estimated'; pricingStatus: PricingStatus; paymentMethod: PaymentMethod; paymentStatus: PaymentStatus;
   paymentRejectionReason?: string; hasPaymentSlip: boolean; priceApprovalStatus: PriceApprovalStatus;
+  amountPaid: number; outstandingAmount: number; paymentReference?: string | null;
+  paymentExpiresAt?: string | null; paymentConfirmationRequestedAt?: string | null;
+  paymentFailureReason?: string; paymentConfirmedAmount?: number | null; paymentAmountMismatch: boolean;
   history: StatusHistory[]; messages: OrderMessage[]; isDemo: boolean; createdAt: string; updatedAt: string;
 };
 
