@@ -38,8 +38,7 @@ export function useDriverTaskTracking(taskId?: string, orderId?: string) {
       catch(e){setError(message(e as Error));resolve(false);} finally{setBusy(false);}
     },(e)=>{setError(message(e));setBusy(false);resolve(false);},{enableHighAccuracy:true,maximumAge:0,timeout:20000}));
   }, [busy, clear, send, sharing]);
-  const stop = useCallback(async () => { clear(); if (supabase && ids.current.orderId) await supabase.rpc('staff_stop_order_tracking_v1',{p_order_id:ids.current.orderId}); }, [clear]);
-  useEffect(() => () => { clear(); if (supabase && ids.current.orderId) void supabase.rpc('staff_stop_order_tracking_v1',{p_order_id:ids.current.orderId}); }, [clear]);
+  const stop = useCallback(async () => { clear(); if (supabase && ids.current.taskId) await supabase.rpc('driver_stop_task_tracking_v1',{p_task_id:ids.current.taskId}); }, [clear]);
+  useEffect(() => () => { clear(); if (supabase && ids.current.taskId) void supabase.rpc('driver_stop_task_tracking_v1',{p_task_id:ids.current.taskId}); }, [clear]);
   return { sharing, busy, error, start, stop };
 }
-

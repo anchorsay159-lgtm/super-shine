@@ -9,9 +9,10 @@ import { useApp } from '@/context/app-context';
 import { formatBangkokDate } from '@/lib/domain';
 
 export default function NotificationsScreen() {
-  const { dataError, dataLoading, language, markAllNotificationsRead, markNotificationRead, notifications, refresh, t, unreadNotifications } = useApp();
+  const { dataError, dataLoading, language, markAllNotificationsRead, markNotificationRead, notifications, profile, refresh, t, unreadNotifications } = useApp();
   async function open(id: string, orderId?: string | null, link?: string | null) {
     await markNotificationRead(id);
+    if (profile.role === 'driver' && link?.startsWith('/driver')) return router.push(link as never);
     if (orderId) router.push({ pathname: '/order-tracking', params: { orderId } });
     else if (link === '/offers') router.push('/(tabs)/offers');
   }
@@ -19,7 +20,7 @@ export default function NotificationsScreen() {
   return (
     <Page>
       <DetailHeader title={t('Notifications')} action={unreadNotifications.length ? t('Read all') : undefined} onAction={() => void markAllNotificationsRead()} />
-      <InformationBanner title={unreadNotifications.length ? t('{{count}} new updates', { count: unreadNotifications.length }) : t('You are all caught up')} message={t('Order progress and support replies appear here.')} icon={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }} />
+      <InformationBanner title={unreadNotifications.length ? t('{{count}} new updates', { count: unreadNotifications.length }) : t('You are all caught up')} message={profile.role === 'driver' ? 'Assignments, schedule changes, and cancellations appear here.' : t('Order progress and support replies appear here.')} icon={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }} />
       {dataLoading && !notifications.length ? <ActivityIndicator color={Colors.teal} /> : null}
       {dataError ? <Card style={styles.state}><Text style={styles.stateTitle}>{t('Notifications could not be loaded')}</Text><Text style={styles.detail}>{t(dataError)}</Text><Button label={t('Retry')} onPress={() => void refresh()} /></Card> : null}
       {!dataLoading && !dataError && !notifications.length ? <Card style={styles.state}><Text style={styles.stateTitle}>{t('No notifications yet')}</Text><Text style={styles.detail}>{t('Order updates and support replies will appear here.')}</Text></Card> : null}

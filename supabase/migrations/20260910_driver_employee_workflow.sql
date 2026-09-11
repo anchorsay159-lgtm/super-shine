@@ -85,6 +85,29 @@ $$;
 revoke all on function public.is_driver() from public, anon;
 grant execute on function public.is_driver() to authenticated;
 
+-- Client profile writes may change contact/preferences, never privileges.
+-- Server-side service-role provisioning has no auth.uid() and remains available.
+create or replace function public.protect_profile_role_v1()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if tg_op = 'INSERT' and coalesce(auth.jwt() ->> 'role','') <> 'service_role' then
+    new.role := 'customer';
+    new.is_demo := coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false);
+  elsif coalesce(auth.jwt() ->> 'role','') <> 'service_role'
+    and (new.role is distinct from old.role or new.is_demo is distinct from old.is_demo) then
+    raise exception 'ROLE_CHANGE_FORBIDDEN';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.protect_profile_role_v1() from public, anon, authenticated;
+drop trigger if exists profiles_protect_role_insert_v1 on public.profiles;
+create trigger profiles_protect_role_insert_v1 before insert on public.profiles
+for each row execute function public.protect_profile_role_v1();
+drop trigger if exists profiles_protect_role_v1 on public.profiles;
+create trigger profiles_protect_role_v1 before update of role,is_demo on public.profiles
+for each row execute function public.protect_profile_role_v1();
+
 alter table public.driver_tasks enable row level security;
 alter table public.driver_task_verifications enable row level security;
 alter table public.driver_task_events enable row level security;
@@ -169,7 +192,10 @@ revoke all on function public.create_driver_task_v1(uuid,text) from public, anon
 
 create or replace function public.sync_driver_tasks_from_order_v1()
 returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_task_id uuid;
+declare
+  v_task_id uuid;
+  v_driver_id uuid;
+  v_scheduled_for timestamptz;
 begin
   if new.is_demo then return new; end if;
   if new.collection_method = 'home_pickup' and new.status in (
@@ -181,7 +207,51 @@ begin
   if new.return_method = 'home_delivery' and new.status in ('ready','out_for_delivery','delivered') then
     v_task_id := public.create_driver_task_v1(new.id, 'delivery');
   end if;
+
+  -- Keep the assigned employee's schedule in sync without creating a second task.
+  if new.collection_method = 'home_pickup' then
+    v_scheduled_for := public.driver_task_schedule_v1(new);
+    v_task_id := null;
+    v_driver_id := null;
+    update public.driver_tasks set scheduled_for=v_scheduled_for,updated_at=now()
+    where order_id=new.id and task_type='pickup' and task_status not in ('completed','cancelled')
+      and scheduled_for is distinct from v_scheduled_for
+    returning id,driver_id into v_task_id,v_driver_id;
+    if v_task_id is not null and v_driver_id is not null and tg_op='UPDATE' then
+      insert into public.notifications(user_id,order_id,title,body,type,link,message_params,source_event_key)
+      values(v_driver_id,new.id,'Pickup schedule changed','The pickup schedule for order '||new.order_number||' was updated.',
+        'driver_task_schedule_changed','/driver/task/'||v_task_id,
+        jsonb_build_object('orderNumber',new.order_number,'taskType','pickup','scheduledFor',v_scheduled_for),
+        'driver-task-schedule:'||v_task_id::text||':'||extract(epoch from clock_timestamp())::bigint::text)
+      on conflict (user_id,order_id,source_event_key) where source_event_key is not null and order_id is not null do nothing;
+    end if;
+  end if;
+  if new.return_method = 'home_delivery' then
+    v_scheduled_for := new.delivery_eta;
+    v_task_id := null;
+    v_driver_id := null;
+    update public.driver_tasks set scheduled_for=v_scheduled_for,updated_at=now()
+    where order_id=new.id and task_type='delivery' and task_status not in ('completed','cancelled')
+      and scheduled_for is distinct from v_scheduled_for
+    returning id,driver_id into v_task_id,v_driver_id;
+    if v_task_id is not null and v_driver_id is not null and tg_op='UPDATE' then
+      insert into public.notifications(user_id,order_id,title,body,type,link,message_params,source_event_key)
+      values(v_driver_id,new.id,'Delivery schedule changed','The delivery schedule for order '||new.order_number||' was updated.',
+        'driver_task_schedule_changed','/driver/task/'||v_task_id,
+        jsonb_build_object('orderNumber',new.order_number,'taskType','delivery','scheduledFor',v_scheduled_for),
+        'driver-task-schedule:'||v_task_id::text||':'||extract(epoch from clock_timestamp())::bigint::text)
+      on conflict (user_id,order_id,source_event_key) where source_event_key is not null and order_id is not null do nothing;
+    end if;
+  end if;
   if new.status = 'cancelled' then
+    insert into public.notifications(user_id,order_id,title,body,type,link,message_params,source_event_key)
+    select t.driver_id,new.id,'Driver task cancelled','The '||t.task_type||' task for order '||new.order_number||' was cancelled.',
+      'driver_task_cancelled','/driver/task/'||t.id,
+      jsonb_build_object('orderNumber',new.order_number,'taskType',t.task_type),
+      'driver-task-cancelled:'||t.id::text
+    from public.driver_tasks t
+    where t.order_id=new.id and t.driver_id is not null and t.task_status not in ('completed','cancelled')
+    on conflict (user_id,order_id,source_event_key) where source_event_key is not null and order_id is not null do nothing;
     update public.driver_tasks set task_status = 'cancelled', cancelled_at = now(), updated_at = now()
     where order_id = new.id and task_status not in ('completed','cancelled');
     update public.order_live_locations set status = 'completed', ended_at = now(), updated_at = now()
@@ -192,7 +262,7 @@ end;
 $$;
 revoke all on function public.sync_driver_tasks_from_order_v1() from public, anon, authenticated;
 drop trigger if exists orders_sync_driver_tasks_v1 on public.orders;
-create trigger orders_sync_driver_tasks_v1 after insert or update of status on public.orders
+create trigger orders_sync_driver_tasks_v1 after insert or update of status, pickup_date, pickup_start, delivery_eta on public.orders
 for each row execute function public.sync_driver_tasks_from_order_v1();
 
 -- Existing live orders are made task-aware without duplicating a leg.
@@ -260,8 +330,8 @@ begin
     t.scheduled_for nulls last, t.created_at), '[]'::jsonb)
   into v_result from public.driver_tasks t
   where t.driver_id = auth.uid()
-    and (case when p_history then t.task_status in ('completed','cancelled','failed')
-      else t.task_status in ('assigned','accepted','en_route','arrived') end);
+    and (case when p_history then t.task_status in ('completed','cancelled')
+      else t.task_status in ('assigned','accepted','en_route','arrived','failed') end);
   return v_result;
 end;
 $$;
@@ -360,11 +430,19 @@ begin
     insert into public.driver_task_events(task_id,order_id,actor_id,actor_role,action,previous_status,new_status,reason,metadata)
     values(p_task_id,v_task.order_id,auth.uid(),'admin',case when v_old_driver is null then 'driver_assigned' else 'driver_reassigned' end,
       v_task.task_status,'assigned',trim(coalesce(p_reason,'')),jsonb_build_object('previousDriverId',v_old_driver,'driverId',p_driver_id));
+    if v_old_driver is not null then
+      insert into public.notifications(user_id,order_id,title,body,type,link,message_params,source_event_key)
+      select v_old_driver,o.id,'Task reassigned','The '||v_task.task_type||' task for order '||o.order_number||' was reassigned.',
+        'driver_task_reassigned','/driver',jsonb_build_object('orderNumber',o.order_number,'taskType',v_task.task_type),
+        'driver-task-reassigned-away:'||p_task_id::text||':'||extract(epoch from clock_timestamp())::bigint::text
+      from public.orders o where o.id=v_task.order_id
+      on conflict (user_id,order_id,source_event_key) where source_event_key is not null and order_id is not null do nothing;
+    end if;
     insert into public.notifications(user_id,order_id,title,body,type,link,message_params,source_event_key)
     select p_driver_id,o.id,'New '||v_task.task_type||' task',
       'You were assigned '||v_task.task_type||' for order '||o.order_number||'.','driver_task_assigned',
       '/driver/task/'||p_task_id,jsonb_build_object('orderNumber',o.order_number,'taskType',v_task.task_type),
-      'driver-task-assigned:'||p_task_id::text||':'||p_driver_id::text
+      'driver-task-assigned:'||p_task_id::text||':'||p_driver_id::text||':'||extract(epoch from clock_timestamp())::bigint::text
     from public.orders o where o.id=v_task.order_id
     on conflict (user_id,order_id,source_event_key) where source_event_key is not null and order_id is not null do nothing;
   end if;
@@ -400,7 +478,7 @@ begin
   select * into v_task from public.driver_tasks where id=p_task_id and driver_id=auth.uid() for update;
   if not found then raise exception 'TASK_NOT_FOUND'; end if;
   select * into v_order from public.orders where id=v_task.order_id for update;
-  if v_task.task_status = 'en_route' then
+  if v_task.task_status in ('en_route','arrived') then
     insert into public.order_live_locations(order_id,task_id,driver_id,phase,status,latitude,longitude,accuracy_meters,heading_degrees,speed_mps,started_at,captured_at,ended_at,updated_at)
     values(v_order.id,p_task_id,auth.uid(),v_task.task_type,'active',p_latitude,p_longitude,p_accuracy_meters,p_heading_degrees,p_speed_mps,coalesce(v_task.started_at,now()),now(),null,now())
     on conflict(order_id) do update set task_id=p_task_id,driver_id=auth.uid(),phase=v_task.task_type,status='active',latitude=p_latitude,
@@ -411,7 +489,8 @@ begin
   end if;
   if v_task.task_status <> 'accepted' then raise exception 'TASK_ACCEPTANCE_REQUIRED'; end if;
   v_expected_order_status := case when v_task.task_type='pickup' then 'accepted' else 'ready' end;
-  if v_order.status <> v_expected_order_status then raise exception 'ORDER_NOT_READY_FOR_TASK'; end if;
+  if v_task.task_type='pickup' and v_order.status not in ('accepted','pickup_in_progress') then raise exception 'ORDER_NOT_READY_FOR_TASK'; end if;
+  if v_task.task_type='delivery' and v_order.status not in ('ready','out_for_delivery') then raise exception 'ORDER_NOT_READY_FOR_TASK'; end if;
 
   update public.orders set status=case when v_task.task_type='pickup' then 'pickup_in_progress' else 'out_for_delivery' end,
     assigned_driver_id=auth.uid(), status_comment=case when v_task.task_type='pickup' then 'Driver started pickup' else 'Driver started delivery' end,
@@ -445,6 +524,26 @@ begin
   where task_id=p_task_id and order_id=v_order_id and driver_id=auth.uid() and status='active';
   if not found then raise exception 'TRACKING_NOT_ACTIVE'; end if;
   perform public.enqueue_driver_arrival_notification_v1(v_order_id);
+end;
+$$;
+
+create or replace function public.driver_stop_task_tracking_v1(p_task_id uuid)
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_task public.driver_tasks%rowtype;
+  v_stopped integer;
+begin
+  if not public.is_driver() then raise exception 'DRIVER_REQUIRED'; end if;
+  select * into v_task from public.driver_tasks where id=p_task_id and driver_id=auth.uid();
+  if not found then raise exception 'TASK_NOT_FOUND'; end if;
+  if v_task.task_status not in ('en_route','arrived') then raise exception 'TASK_NOT_ACTIVE'; end if;
+  update public.order_live_locations set status='completed',ended_at=now(),updated_at=now()
+  where task_id=p_task_id and order_id=v_task.order_id and driver_id=auth.uid() and status='active';
+  get diagnostics v_stopped = row_count;
+  if v_stopped > 0 then
+    insert into public.driver_task_events(task_id,order_id,actor_id,actor_role,action,previous_status,new_status)
+    values(p_task_id,v_task.order_id,auth.uid(),'driver','tracking_paused',v_task.task_status,v_task.task_status);
+  end if;
 end;
 $$;
 
@@ -572,6 +671,7 @@ begin
   if v_task.task_status='completed' then return public.driver_task_payload_v1(p_task_id,true); end if;
   if v_task.task_status not in ('assigned','accepted','en_route','arrived','failed') then raise exception 'TASK_OVERRIDE_NOT_ALLOWED'; end if;
   select * into v_order from public.orders where id=v_task.order_id for update;
+  perform set_config('app.driver_admin_override','on',true);
 
   if v_task.task_type='pickup' then
     if v_order.status in ('accepted','pickup_in_progress') then
@@ -611,6 +711,7 @@ revoke all on function public.admin_assign_driver_task_v1(uuid,uuid,text) from p
 revoke all on function public.driver_accept_task_v1(uuid) from public, anon;
 revoke all on function public.driver_start_task_v1(uuid,double precision,double precision,double precision,double precision,double precision) from public, anon;
 revoke all on function public.driver_update_task_location_v1(uuid,double precision,double precision,double precision,double precision,double precision) from public, anon;
+revoke all on function public.driver_stop_task_tracking_v1(uuid) from public, anon;
 revoke all on function public.driver_arrive_task_v1(uuid) from public, anon;
 revoke all on function public.driver_complete_task_v1(uuid,text) from public, anon;
 revoke all on function public.driver_report_task_issue_v1(uuid,text,text) from public, anon;
@@ -628,6 +729,7 @@ grant execute on function public.admin_assign_driver_task_v1(uuid,uuid,text) to 
 grant execute on function public.driver_accept_task_v1(uuid) to authenticated;
 grant execute on function public.driver_start_task_v1(uuid,double precision,double precision,double precision,double precision,double precision) to authenticated;
 grant execute on function public.driver_update_task_location_v1(uuid,double precision,double precision,double precision,double precision,double precision) to authenticated;
+grant execute on function public.driver_stop_task_tracking_v1(uuid) to authenticated;
 grant execute on function public.driver_arrive_task_v1(uuid) to authenticated;
 grant execute on function public.driver_complete_task_v1(uuid,text) to authenticated;
 grant execute on function public.driver_report_task_issue_v1(uuid,text,text) to authenticated;
@@ -640,6 +742,31 @@ create or replace function public.can_manage_order_tracking_v1(p_order_id uuid)
 returns boolean language sql stable security definer set search_path = public, pg_temp as $$
   select public.is_admin();
 $$;
+
+-- Routine pickup/delivery transitions belong to the assigned driver task.
+-- The dedicated admin override RPC sets a transaction-local flag and records why.
+create or replace function public.guard_driver_owned_order_transition_v1()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_task_type text;
+begin
+  if old.status is not distinct from new.status or auth.uid() is null or not public.is_admin() then return new; end if;
+  v_task_type := case
+    when old.status in ('accepted','pickup_in_progress') and new.status in ('pickup_in_progress','picked_up') then 'pickup'
+    when old.status in ('ready','out_for_delivery') and new.status in ('out_for_delivery','delivered') then 'delivery'
+    else null end;
+  if v_task_type is not null
+    and coalesce(current_setting('app.driver_admin_override',true),'') <> 'on'
+    and exists(select 1 from public.driver_tasks t where t.order_id=new.id and t.task_type=v_task_type and t.task_status not in ('completed','cancelled'))
+  then
+    raise exception 'DRIVER_TASK_ACTION_REQUIRED';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_driver_owned_order_transition_v1() from public, anon, authenticated;
+drop trigger if exists orders_guard_driver_owned_transition_v1 on public.orders;
+create trigger orders_guard_driver_owned_transition_v1 before update of status on public.orders
+for each row execute function public.guard_driver_owned_order_transition_v1();
 
 -- Correctly attribute order status history produced by driver task actions.
 create or replace function public.record_order_status_v11()

@@ -74,11 +74,16 @@ make duplicate pickup or delivery tasks.
   code, live route, ETA/distance, and the existing customer journey. Admin order
   detail shows Driver trips; the new Drivers page provides dispatch, active work,
   and issues.
+- Customer Web order detail has the same privacy-scoped task/location visibility
+  and Realtime refresh. It hides the panel safely if the local task migration has
+  not been deployed.
 - Driver task tables are published to Supabase Realtime. Assignments and actions
   refresh relevant Driver/Admin/Customer screens without manual reload.
 - Existing order-status notifications continue to flow through the existing
-  notification/outbox/LINE worker. Arrival adds a customer notification. No LINE
-  OAuth, channel, or webhook configuration was changed.
+  notification/outbox/LINE worker. Arrival adds a customer notification and a
+  customer-facing LINE card template. Driver assignment, reassignment, schedule,
+  and cancellation changes create operational in-app notifications. No LINE OAuth,
+  channel, or webhook configuration was changed.
 
 ## 21–24. Security, audit, idempotency, and exceptions
 
@@ -90,6 +95,8 @@ make duplicate pickup or delivery tasks.
   the customer payload.
 - Direct task writes are revoked from anonymous/authenticated clients. Trusted RPCs
   validate role, ownership, task state, coordinates, and order state.
+- Authenticated clients cannot select or promote a profile role; driver creation is
+  reserved for the service-role-backed Admin Edge Function.
 - Task events audit assignment, reassignment, accept/start/arrival/completion,
   failed code attempts, issues, resets, and emergency overrides. Existing order
   history correctly attributes driver-generated status transitions.
@@ -100,7 +107,8 @@ make duplicate pickup or delivery tasks.
   resolve it, reset a task for retry, reassign it (reason required), or use the
   deliberately non-primary emergency completion override (reason required). An
   admin cannot use normal “More actions” to bypass a driver’s pickup/delivery
-  completion.
+  completion. The database also rejects routine Admin transport transitions while
+  an active driver task owns that leg.
 
 ## 25–26. Principal files and migration
 
@@ -115,6 +123,7 @@ make duplicate pickup or delivery tasks.
 - `src/hooks/use-driver-task-tracking.ts` and `.web.ts`
 - `src/hooks/use-customer-driver-tasks.ts`
 - `src/types/driver.ts`
+- `apps/customer-web/src/components/driver-trip-panel.tsx`
 
 ## 27–29. Verification performed
 
@@ -126,15 +135,19 @@ flow, web compatibility, and visual regressions.
 Commands run successfully:
 
 ```powershell
-npm.cmd test              # 88 passed, 0 failed
+npm.cmd test              # 92 passed, 0 failed
 npm.cmd run check         # TypeScript and Expo lint passed
-npx.cmd expo export --platform web --output-dir .tmp-driver-workflow-export
-npx.cmd expo export --platform android --output-dir .tmp-driver-android-export
-npx.cmd expo export --platform ios --output-dir .tmp-driver-ios-export
+npx.cmd expo export --platform web --output-dir .tmp-driver-workflow-continuation-web
+npx.cmd expo export --platform android --output-dir .tmp-driver-workflow-continuation-android
+npx.cmd expo export --platform ios --output-dir .tmp-driver-workflow-continuation-ios
 ```
 
 The exported web routes include `/driver`, `/driver/task/[id]`, and
 `/admin/drivers`.
+
+Customer Web validation also passed its tests, TypeScript check, and production
+build. Its lint completed without errors and retained two unrelated pre-existing
+hook-dependency warnings in `src/app/profile/page.tsx`.
 
 ## 30–31. Remaining manual work and configuration
 

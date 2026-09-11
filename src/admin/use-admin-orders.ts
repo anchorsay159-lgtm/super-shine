@@ -30,25 +30,32 @@ export function useAdminOrders(enabled: boolean) {
     if (quiet) setRefreshing(true);
     else setLoading(true);
     setError('');
-    const [orderResult, messageResult] = await Promise.all([
-      supabase.from('orders').select(ORDER_SELECT).order('created_at', { ascending: false }),
-      supabase.from('support_messages').select('id,order_id,sender_role,read_at,created_at').order('created_at', { ascending: false }),
-    ]);
-    setLoading(false);
-    setRefreshing(false);
-    const queryError = orderResult.error || messageResult.error;
-    if (queryError) {
-      setError(queryError.message);
-      return;
+    try {
+      const [orderResult, messageResult] = await Promise.all([
+        supabase.from('orders').select(ORDER_SELECT).order('created_at', { ascending: false }),
+        supabase.from('support_messages').select('id,order_id,sender_role,read_at,created_at').order('created_at', { ascending: false }),
+      ]);
+      const queryError = orderResult.error || messageResult.error;
+      if (queryError) {
+        setError(queryError.message);
+        return;
+      }
+      const orderRows = Array.isArray(orderResult.data) ? orderResult.data : [];
+      const messageRows = Array.isArray(messageResult.data) ? messageResult.data : [];
+      setOrders(orderRows.map(mapOrder));
+      setMessages(messageRows.map((row) => ({
+        id: row.id,
+        orderId: row.order_id,
+        senderRole: row.sender_role,
+        readAt: row.read_at,
+        createdAt: row.created_at,
+      })) as SupportQueueMessage[]);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Admin orders could not be loaded.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setOrders((orderResult.data || []).map(mapOrder));
-    setMessages((messageResult.data || []).map((row) => ({
-      id: row.id,
-      orderId: row.order_id,
-      senderRole: row.sender_role,
-      readAt: row.read_at,
-      createdAt: row.created_at,
-    })) as SupportQueueMessage[]);
   }, [enabled]);
 
   useEffect(() => { void load(); }, [load]);

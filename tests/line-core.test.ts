@@ -24,6 +24,12 @@ test('LINE templates respect store collection wording and payment amount', () =>
   assert.match(paid.body, /฿320\.00/);
 });
 
+test('driver arrival has a customer-facing LINE message', () => {
+  const message = lineTemplate('driver_arrived', 'en', { orderNumber: 'SS-1200' });
+  assert.equal(message.title, 'Driver arrived');
+  assert.match(message.body, /SS-1200/);
+});
+
 test('LINE notifications use a branded Flex card with a button and concise preview', () => {
   const message = lineFlexMessage('payment_confirmed', 'en', { orderNumber: 'SS-42', amount: 320 }, 'https://example.com/order');
   assert.equal(message.type, 'flex');

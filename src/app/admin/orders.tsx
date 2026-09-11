@@ -19,7 +19,17 @@ const STATUS_FILTERS: ('all' | OrderStatus)[] = ['all', 'pending', 'accepted', '
 const PAYMENT_FILTERS: ('all' | PaymentStatus)[] = ['all', 'unpaid', 'pending', 'paid', 'partially_paid', 'failed', 'expired', 'refunded'];
 
 function safePrimaryNext(order: CustomerOrder) {
-  return primaryNextStatus(order);
+  const next = primaryNextStatus(order);
+  if (order.isDemo) return next;
+  if (order.collectionMethod === 'home_pickup' && (
+    (order.status === 'accepted' && next === 'pickup_in_progress') ||
+    (order.status === 'pickup_in_progress' && next === 'picked_up')
+  )) return null;
+  if (order.returnMethod === 'home_delivery' && (
+    (order.status === 'ready' && next === 'out_for_delivery') ||
+    (order.status === 'out_for_delivery' && next === 'delivered')
+  )) return null;
+  return next;
 }
 const SAVED_VIEWS: { id: SavedView; label: string }[] = [
   { id: 'all', label: 'All real orders' }, { id: 'needs-confirmation', label: 'Needs confirmation' },
@@ -104,7 +114,7 @@ export default function AdminOrders() {
     if (!supabase || saving || ids.length === 0) return;
     const client = supabase;
     const targets = orders.filter((order) => ids.includes(order.databaseId));
-    if (targets.some((order) => primaryNextStatus(order) !== nextStatus)) return Alert.alert('Invalid transition', 'One or more orders cannot move to that stage for their fulfillment method.');
+    if (targets.some((order) => safePrimaryNext(order) !== nextStatus)) return Alert.alert('Invalid transition', 'One or more orders require the assigned driver to record this transport action.');
     setSaving(true);
     const results = await Promise.all(ids.map((id) => client.rpc('admin_update_order_status_v20', { p_order_id: id, p_next_status: nextStatus, p_comment: `Updated to ${statusLabel(nextStatus)} by admin` })));
     const updateError = results.find((result) => result.error)?.error;

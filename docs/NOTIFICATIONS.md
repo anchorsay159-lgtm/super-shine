@@ -10,6 +10,8 @@ The application has a `notifications` data model and customer notification UI. C
 
 Order lifecycle and payment/support changes have migration-backed notification behavior. Customer-facing UI must treat realtime as a refresh signal and still enforce data access through Supabase/RLS.
 
+The local driver migration adds in-app notifications for new assignment, reassignment (old and new driver), schedule changes, cancellation, customer arrival, and customer trip-start/arrival events. Driver notification links route back into `/driver`. These source changes are not verified on the remote database. The LINE template source contains a concise customer-facing `driver_arrived` card; no external LINE channel setting was changed.
+
 ## CURRENTLY IMPLEMENTED — LINE architecture
 
 The repository implements LINE as a server-side connected-account/outbox workflow:
@@ -45,7 +47,7 @@ Supabase runtime credentials/service-role access remain server-side. Never copy 
 
 ## PLANNED
 
-The driver workflow plan may add customer “arriving soon” notifications based on an active, authorized task location/ETA threshold. This is planned only. It must have clear opt-in/notification settings, rate limiting/deduplication, and a fallback when GPS/route data is unavailable.
+The local task migration retains the existing distance-based arriving notification mechanism and adds arrival/task operational events. Remote execution remains unverified. Any future change to thresholds, opt-in behavior, or channel fan-out is **PLANNED** and must preserve rate limiting/deduplication plus a fallback when GPS/route data is unavailable.
 
 ## DO NOT CHANGE WITHOUT REVIEW
 

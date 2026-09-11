@@ -49,7 +49,7 @@ Customer routes include:
 
 ### Customer Web
 
-`apps/customer-web/` is a Next.js 16 customer-facing app. It uses `@supershine/shared`, its own Web App context, Supabase browser session handling, customer catalog/order/payment/support flows, and security headers in `next.config.ts`.
+`apps/customer-web/` is a Next.js 16 customer-facing app. It uses `@supershine/shared`, its own Web App context, Supabase browser session handling, customer catalog/order/payment/support flows, and security headers in `next.config.ts`. The local worktree also contains a privacy-scoped driver-trip panel on real order details; it reads the customer's task/location RPCs and subscribes to task/location changes, but hides when the unapplied driver schema is unavailable.
 
 Customer web routes include `/`, `/auth/callback`, `/cart`, `/checkout`, `/forgot-password`, `/reset-password`, `/notifications`, `/orders`, `/orders/[id]`, `/profile`, and `/services/[id]`. The `apps/customer-web/src/app/admin/[[...path]]/page.tsx` route intentionally prevents this app from being used as the operations dashboard.
 
@@ -80,7 +80,7 @@ This is source present locally. Its migration/deployment state was not verified 
 | GPS/map UI | `customer-order-gps-card.tsx`, `admin-order-gps-card*`, `live-location-map*`, `use-order-live-location.ts`, `use-driving-route.ts` | order tracking map, current-location and route presentation |
 | LINE UI | `line-connect-button*` and `src/app/line-callback.tsx` | customer connection entry/return UI; message delivery remains server-side |
 | Admin operations | `src/admin/admin-ui.tsx`, `use-admin-orders.ts`, `order-config.ts`, `pickup-slots.ts` | dashboard/order queue/detail configuration |
-| Local driver work | `src/driver/use-driver-tasks.ts`, `use-driver-task-tracking*`, `use-customer-driver-tasks.ts`, task card components | local task assignment/tracking source, not remotely verified |
+| Local driver work | `src/driver/use-driver-tasks.ts`, `use-driver-task-tracking*`, `use-customer-driver-tasks.ts`, task card components, `apps/customer-web/src/components/driver-trip-panel.tsx` | local task assignment/tracking source for Expo, Admin, and Customer Web; not remotely verified |
 | Supabase services | `src/lib/`, `src/context/app-context.tsx`, `apps/customer-web/src/context/web-app.tsx`, `supabase/functions/` | client queries/RPC calls and protected LINE/driver Edge Functions |
 
 Platform-suffixed `.web.tsx` / `.web.ts` files provide web-specific implementations where present. The existence of a component does not establish a corresponding remote table, policy, or deployed feature.
@@ -115,7 +115,7 @@ The repository identifies Supabase project reference `tozgpzdvddjtcdzhgbqa`. Thi
 ## KNOWN ISSUE
 
 - The worktree is not clean. It contains customer-web/shared changes, local driver workflow work, temp exports/screenshots, and other artifacts. A future session must inspect `git status` before modifying or removing anything.
-- `src/app/_layout.tsx` currently declares the `driver` stack screen twice. This was observed in local source; do not silently fix it during an unrelated task.
+- The driver workflow has not been exercised against the target Supabase project with separate real customer, driver, and admin accounts; source presence and passing static tests are not deployment evidence.
 - Migration files are the best repository schema record, but the original complete baseline schema and the remote migration history were not verified in this handoff. Treat remote database state as unknown until checked with an authorized, read-only inspection.
 - Existing GPS and LINE setup documents include external configuration prerequisites. Code alone cannot make an unpublished LINE Login channel or misconfigured webhook work.
 

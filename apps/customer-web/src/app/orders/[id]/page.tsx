@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { COLLECTION_METHOD_LABELS, CUSTOMER_ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, RETURN_METHOD_LABELS, formatDateTime, formatMoney, orderWorkflow, orderWorkflowProgress } from '@supershine/shared';
 import { AppShell } from '@/components/shell';
+import { DriverTripPanel } from '@/components/driver-trip-panel';
 import { Card, EmptyState, LoadingState, PageHeader, StatusBadge } from '@/components/ui';
 import { useWebApp } from '@/context/web-app';
 
@@ -50,6 +51,8 @@ export default function OrderDetailPage() {
       <div className="timeline" style={{marginTop: 20}}>{workflow.map((status, index) => <div className="timeline-item" key={status}><strong>{index < workflowIndex ? '✓ ' : index === workflowIndex ? '● ' : '○ '}{CUSTOMER_ORDER_STATUS_LABELS[status]}</strong></div>)}</div>
       {order.priceApprovalStatus === 'pending' ? <div className="card card-pad" style={{marginTop: 20}}><h2>Final price approval required</h2><p>The laundry team updated the final total to <strong>{formatMoney(order.amount, app.language)}</strong>. Approve it to continue, or reject it so the team can contact you.</p><div className="cluster"><button className="button button-primary" disabled={Boolean(app.busy)} onClick={() => void app.respondToPrice(order.databaseId, true)}>Approve final price</button><button className="button button-danger" disabled={Boolean(app.busy)} onClick={() => void app.respondToPrice(order.databaseId, false)}>Reject</button></div></div> : null}
     </Card>
+
+    {!order.isDemo ? <DriverTripPanel orderId={order.databaseId} orderStatus={order.status}/> : null}
 
     <div className="grid grid-2" style={{marginTop: 20}}>
       <Card className="detail-section"><h2>Fulfillment</h2><div className="detail-list"><div className="detail-row"><span>Receive laundry</span><strong>{COLLECTION_METHOD_LABELS[order.collectionMethod]}</strong></div><div className="detail-row"><span>Return laundry</span><strong>{RETURN_METHOD_LABELS[order.returnMethod]}</strong></div>{order.collectionMethod === 'home_pickup' ? <div className="detail-row"><span>Pickup window</span><strong>{order.pickupDate} · {order.pickupStart?.slice(0,5)}–{order.pickupEnd?.slice(0,5)}</strong></div> : <div className="detail-row"><span>Store</span><strong>{app.settings.storeName} · {app.settings.openTime.slice(0,5)}–{app.settings.closeTime.slice(0,5)}</strong></div>}{order.pickupAddress || order.deliveryAddress ? <div className="detail-row"><span>Address</span><strong>{order.deliveryAddress || order.pickupAddress}</strong></div> : null}<div className="detail-row"><span>Contact</span><strong>{order.contactPhone}</strong></div>{order.pickupInstructions ? <div className="detail-row"><span>Instructions</span><strong>{order.pickupInstructions}</strong></div> : null}</div></Card>

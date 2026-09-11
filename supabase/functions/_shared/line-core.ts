@@ -55,6 +55,7 @@ export function lineTemplate(type: string, language: LineLanguage, payload: Reco
     ready_for_collection: ['Ready for collection', `Order ${orderNumber} is ready to collect at Super Shine.`],
     delivery_started: ['Out for delivery', `Clean laundry from order ${orderNumber} is on the way.`],
     driver_arriving: ['Driver arriving soon', `Your driver is about ${distanceLabel} away for order ${orderNumber}. Please get ready.`],
+    driver_arrived: ['Driver arrived', `Your driver has arrived for order ${orderNumber}.`],
     order_delivered: ['Delivered', `Order ${orderNumber} has been delivered.`],
     order_collected: ['Collected', `Order ${orderNumber} has been collected. Thank you!`],
     order_cancelled: ['Order cancelled', `Order ${orderNumber} has been cancelled.`],
@@ -82,7 +83,7 @@ function lineVisualStyle(type: string) {
   if (type === 'payment_due') {
     return { accent: '#B7791F', tint: '#FFF4D6', label: 'PAYMENT UPDATE', icon: '฿' };
   }
-  if (type === 'driver_arriving') {
+  if (type === 'driver_arriving' || type === 'driver_arrived') {
     return { accent: '#C77700', tint: '#FFF4D6', label: 'DRIVER NEARBY', icon: '⌖' };
   }
   if (['payment_confirmed', 'order_delivered', 'order_collected', 'laundry_ready', 'ready_for_collection'].includes(type)) {

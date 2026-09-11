@@ -31,12 +31,14 @@ Migration source contains customer ownership policies for customer records, admi
 - Payment verification, receipt/cash handling, and accounting changes are not customer or driver actions.
 - Sensitive LINE tokens and server secrets are Edge Function/Supabase secret material, never client role capabilities.
 - Tracking location reads/writes are permissioned separately from merely viewing an order.
+- The local driver migration forces authenticated profile inserts to customer/non-demo values and rejects client changes to `role` or `is_demo`. Driver provisioning is reserved for the service-role-backed Admin Edge Function.
+- Local task RPCs restrict routine transport actions to the assigned driver. Admin emergency completion is separate, reason-required, and audited.
 
 ## KNOWN ISSUE
 
 - Remote role assignments and actual RLS deployment state were not inspected directly. Do not infer that an account has a role from its email address or visible UI.
 - The locally added `driver` role, routes, task policies, and Edge Function are not proof that the remote database recognizes the role.
-- Client-side navigation cannot prevent direct API attempts; a role bug must be diagnosed at the database/function boundary.
+- Client-side navigation cannot prevent direct API attempts; a role bug must be diagnosed at the database/function boundary. The new role/task guards remain unverified remotely until the migration is applied and role-matrix tests are run.
 
 ## PLANNED
 

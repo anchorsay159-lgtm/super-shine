@@ -53,7 +53,7 @@ Migration source enables RLS across the application. The source-backed pattern i
 - accounting uses dedicated staff-role permissions, not simply an arbitrary client-side role;
 - private order uploads use a private storage bucket, while business-public assets use a separate public bucket/policies.
 
-GPS migration source grants participants limited reads but protects location writes through functions and authenticated role/ownership checks. The local driver migration adds task-specific RLS: drivers read their assigned task, customers read tasks for their own orders, and admins can manage; verification/issue access is more restrictive. This is local migration source only.
+GPS migration source grants participants limited reads but protects location writes through functions and authenticated role/ownership checks. The local driver migration adds task-specific RLS: drivers read their assigned task, customers read tasks for their own orders, and admins can manage; verification/issue access is more restrictive. It also adds task-scoped start/update/stop RPCs, a client role-change guard, a database guard against routine Admin transport transitions, schedule synchronization, driver operational notifications, audit events, and a reason-required override. This is local migration source only.
 
 ## KNOWN ISSUE
 

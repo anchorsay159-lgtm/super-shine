@@ -36,7 +36,7 @@ This repository powers Super Shine Laundry. It contains more than one front end 
 
 ## Current-state warning
 
-The repository includes a **local, unapplied/unverified** driver-employee workflow migration and related UI/hooks/routes. Do not describe it as deployed or production-ready until the project’s remote database, Edge Function configuration, and app deployment have been explicitly verified. See `docs/WORKFLOW.md` and `docs/CHANGELOG.md`.
+The repository includes a **local, unapplied/unverified** driver-employee workflow migration and related Expo, Customer Web, Admin, notification, and tracking code. Do not describe it as deployed or production-ready until the project’s remote database, Edge Function configuration, and app deployment have been explicitly verified. See `docs/WORKFLOW.md` and `docs/CHANGELOG.md`.
 
 ## CURRENTLY IMPLEMENTED
 
@@ -48,7 +48,7 @@ The next intended feature is the Customer ↔ Driver/Employee ↔ Admin workflow
 
 ## KNOWN ISSUE
 
-The worktree contains many pre-existing code changes and generated artifacts. Remote deployment/schema/LINE setup cannot be inferred from the files here. There is also a duplicate `driver` screen registration in the local Expo root layout.
+The worktree contains many pre-existing code changes and generated artifacts. Remote deployment/schema/LINE setup cannot be inferred from the files here. The driver workflow has source-level automated coverage but has not been exercised against the target database with separate real customer, driver, and admin accounts.
 
 ## DO NOT CHANGE WITHOUT REVIEW
 

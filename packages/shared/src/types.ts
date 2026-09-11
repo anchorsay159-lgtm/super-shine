@@ -64,7 +64,7 @@ export type OrderItem = {
 };
 
 export type OrderMessage = { id: string; senderRole: 'customer' | 'admin'; message: string; readAt?: string | null; createdAt: string };
-export type StatusHistory = { id: string; previousStatus?: OrderStatus | null; newStatus: OrderStatus; actorRole: 'customer' | 'admin' | 'system'; comment: string; createdAt: string };
+export type StatusHistory = { id: string; previousStatus?: OrderStatus | null; newStatus: OrderStatus; actorRole: 'customer' | 'admin' | 'driver' | 'system'; comment: string; createdAt: string };
 
 export type CustomerOrder = {
   databaseId: string; id: string; userId: string; status: OrderStatus; items: OrderItem[];

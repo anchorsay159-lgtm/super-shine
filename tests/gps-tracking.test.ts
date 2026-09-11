@@ -52,10 +52,18 @@ test('one driver action advances the trip and starts task-scoped live tracking',
   assert.match(driverWorkflowMigration, /task_status='en_route'/);
   assert.match(driverWorkflowMigration, /pickup_in_progress/);
   assert.match(driverWorkflowMigration, /out_for_delivery/);
-  assert.match(driverTracking, /staff_stop_order_tracking_v1/);
+  assert.match(driverTracking, /driver_stop_task_tracking_v1/);
   assert.match(ownershipMigration, /assigned_driver_id = auth\.uid\(\)/);
   assert.match(ownershipMigration, /driver_id = auth\.uid\(\)/);
   assert.match(ownershipMigration, /TRACKING_DEVICE_NOT_OWNER/);
+});
+
+test('driver task tracking can pause and safely resume after reopening or reassignment', () => {
+  assert.match(driverWorkflowMigration, /driver_stop_task_tracking_v1/);
+  assert.match(driverWorkflowMigration, /task_status in \('en_route','arrived'\)/);
+  assert.match(driverWorkflowMigration, /v_order\.status not in \('accepted','pickup_in_progress'\)/);
+  assert.match(driverWorkflowMigration, /v_order\.status not in \('ready','out_for_delivery'\)/);
+  assert.match(driverTask, /Live GPS resumed on this phone/);
 });
 
 test('customer and staff maps use a routed road polyline with distance and ETA', () => {

@@ -62,8 +62,11 @@ The following driver/employee implementation is in the local worktree:
 - admin and customer task cards: `src/components/admin-driver-task-card.tsx`, `src/components/customer-driver-task-card.tsx`;
 - task/location hooks under `src/driver/` and `src/hooks/`;
 - local driver role/types and `/admin/drivers` route;
+- a Customer Web order-detail driver trip panel with task/location Realtime refresh;
 - Edge Function source `supabase/functions/admin-create-driver/index.ts`;
 - migration source `supabase/migrations/20260910_driver_employee_workflow.sql`.
+
+The local migration also protects profile roles from client promotion, synchronizes task schedules, emits assignment/reassignment/schedule/cancellation notifications, supports task-scoped foreground tracking pause/resume, and prevents normal Admin order mutations from reproducing driver-owned transport transitions while an active task exists. The reason-required Admin override remains a separate audited path.
 
 The migration and deployment were not verified remotely. These artifacts must be treated as local/unapplied work, not as a currently available customer or staff workflow.
 
@@ -71,11 +74,11 @@ The migration and deployment were not verified remotely. These artifacts must be
 
 - A customer can only observe reliable “live” tracking where the applicable database schema, realtime publication, authenticated staff/driver path, and device location permissions are all deployed/configured. This handoff does not verify those conditions remotely.
 - `expo-location` supports foreground device-location use in the local worktree. There is no verified background tracking implementation in this handoff. Do not promise Grab-style tracking while the app is closed or backgrounded.
-- Manual staff ownership/takeover from earlier GPS work and task-assigned driver tracking from local work need a deliberate product/data reconciliation before rollout. Do not merge their assumptions casually.
+- Earlier staff-owned GPS functions remain in migration history for compatibility. New driver UI calls the task-scoped functions. Verify the target database definitions and active clients before retiring any legacy function.
 
-## PLANNED — NEXT WORK: Customer ↔ Driver/Employee ↔ Admin workflow upgrade
+## PLANNED — NEXT WORK: reviewed rollout of Customer ↔ Driver/Employee ↔ Admin
 
-This is the intended architecture for the next feature, **not a deployed claim**:
+The following is the intended production architecture. Matching source is now present locally, but this remains **PLANNED** until the migration/function/build are reviewed, deployed, and tested with controlled real-role accounts:
 
 1. An authorized admin assigns a pickup or delivery task to one active driver/employee for an eligible order stage.
 2. The assigned driver sees only their own task, explicitly accepts it, and grants foreground location permission with a clear purpose message.
@@ -85,7 +88,7 @@ This is the intended architecture for the next feature, **not a deployed claim**
 6. Handoff verification should record collection/delivery evidence and status transitions. Payment confirmation remains an admin/accounting-controlled process; drivers must not be able to mark a payment paid.
 7. End a task at collection/delivery/cancellation, stop location writes, reduce customer visibility, retain only the minimum audit history necessary for operations and disputes.
 
-Before building or deploying this plan: confirm the remote schema/migration history, reconcile the existing GPS implementation with the driver migration, test RLS using customer/driver/admin accounts, obtain an explicit privacy/retention decision, and obtain user approval for database/function/app deployment.
+Before deploying this plan: confirm the remote schema/migration history, review the existing GPS objects against the task migration, test RLS and every fulfillment route using separate customer/driver/admin accounts, verify LINE and in-app delivery, confirm foreground-location privacy/retention wording, and obtain explicit user approval for database/function/app deployment.
 
 ## DO NOT CHANGE WITHOUT REVIEW
 
